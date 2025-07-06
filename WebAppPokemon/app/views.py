@@ -7,12 +7,35 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from app.models import Pokemon, DatiPesca
 import numpy as np
+import seaborn as sns
 
 main = Blueprint('main', __name__)
 
 @main.route('/')
 def index():
     return render_template('dashboard.html')
+
+@main.route('/genera-grafici')
+def genera_tutti_grafici():
+    """Genera tutti i grafici e li salva nella cartella static/graphs"""
+    
+    # Assicurati che la cartella esista
+    graphs_dir = os.path.join('app', 'static', 'graphs')
+    os.makedirs(graphs_dir, exist_ok=True)
+    
+    # Genera tutti i grafici
+    grafico()
+    grafico_occupazione_importanza()
+    grafico_hp()
+    grafico_tipi()
+    grafico_atkdef()
+    grafico_legendari()
+    grafico_importanza_economica_barre()
+    grafico_produttivita_evoluzione()
+    grafico_heatmap_variazioni()
+    grafico_radar_top_regioni()
+    
+    return "Tutti i grafici sono stati generati e salvati in static/graphs/"
 
 @main.route('/grafico')
 def grafico():
@@ -36,11 +59,13 @@ def grafico():
     plt.legend(loc='upper left', bbox_to_anchor=(1, 1))
     plt.tight_layout()
     plt.grid(True)
-    buf = io.BytesIO()
-    plt.savefig(buf, format='png')
+    
+    # Salva il grafico nella cartella static/graphs
+    graph_path = os.path.join('app', 'static', 'graphs', 'produttivita_pesca.png')
+    plt.savefig(graph_path, format='png', dpi=300, bbox_inches='tight')
     plt.close()
-    buf.seek(0)
-    return Response(buf.getvalue(), mimetype='image/png')
+    
+    return "Grafico salvato in static/graphs/produttivita_pesca.png"
     
 @main.route('/grafico/occupazione')
 def grafico_occupazione_importanza():
@@ -75,13 +100,210 @@ def grafico_occupazione_importanza():
     plt.grid(True)
     plt.tight_layout()
 
-    # Salva in buffer e ritorna come PNG
-    buf = io.BytesIO()
-    plt.savefig(buf, format='png')
+    # Salva il grafico nella cartella static/graphs
+    graph_path = os.path.join('app', 'static', 'graphs', 'occupazione_importanza.png')
+    plt.savefig(graph_path, format='png', dpi=300, bbox_inches='tight')
     plt.close()
-    buf.seek(0)
-    return Response(buf.getvalue(), mimetype='image/png')
+    
+    return "Grafico salvato in static/graphs/occupazione_importanza.png"
 
+@main.route('/grafico/importanza-barre')
+def grafico_importanza_economica_barre():
+    """Grafico a barre delle regioni con maggiore importanza economica media"""
+    dati = DatiPesca.query.all()
+    
+    # Calcola l'importanza economica media per regione
+    importanza_media = {}
+    for d in dati:
+        if d.regione not in importanza_media:
+            importanza_media[d.regione] = []
+        importanza_media[d.regione].append(d.importanza_economica)
+    
+    # Calcola la media per ogni regione
+    regioni = []
+    medie = []
+    for regione, valori in importanza_media.items():
+        if valori:  # Se ci sono valori
+            regioni.append(regione)
+            medie.append(np.mean(valori))
+    
+    # Ordina per importanza decrescente e prendi le top 10
+    sorted_data = sorted(zip(regioni, medie), key=lambda x: x[1], reverse=True)[:10]
+    regioni_top = [x[0] for x in sorted_data]
+    medie_top = [x[1] for x in sorted_data]
+    
+    # Crea il grafico
+    plt.figure(figsize=(12, 8))
+    colors = plt.cm.viridis(np.linspace(0, 1, len(regioni_top)))
+    bars = plt.bar(regioni_top, medie_top, color=colors, alpha=0.7)
+    
+    # Aggiungi i valori sulle barre
+    for bar, valore in zip(bars, medie_top):
+        plt.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.001,
+                f'{valore:.3f}', ha='center', va='bottom', fontweight='bold')
+    
+    plt.xlabel('Regione')
+    plt.ylabel('Importanza Economica Media')
+    plt.title('Top 10 Regioni per Importanza Economica del Settore Pesca')
+    plt.xticks(rotation=45, ha='right')
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
+    
+    # Salva il grafico
+    graph_path = os.path.join('app', 'static', 'graphs', 'importanza_economica_barre.png')
+    plt.savefig(graph_path, format='png', dpi=300, bbox_inches='tight')
+    plt.close()
+    
+    return "Grafico salvato in static/graphs/importanza_economica_barre.png"
+
+@main.route('/grafico/produttivita-evoluzione')
+def grafico_produttivita_evoluzione():
+    """Grafico dell'evoluzione temporale della produttività media nazionale"""
+    dati = DatiPesca.query.all()
+    
+    # Raggruppa per anno e calcola la media nazionale
+    produttivita_annuale = {}
+    for d in dati:
+        if d.anno not in produttivita_annuale:
+            produttivita_annuale[d.anno] = []
+        produttivita_annuale[d.anno].append(d.produttivita)
+    
+    anni = sorted(produttivita_annuale.keys())
+    medie_nazionali = [np.mean(produttivita_annuale[anno]) for anno in anni]
+    
+    # Calcola la tendenza lineare
+    z = np.polyfit(anni, medie_nazionali, 1)
+    p = np.poly1d(z)
+    trend_line = p(anni)
+    
+    # Crea il grafico
+    plt.figure(figsize=(12, 8))
+    plt.plot(anni, medie_nazionali, 'o-', linewidth=2, markersize=8, 
+             label='Produttività Media Nazionale', color='blue')
+    plt.plot(anni, trend_line, '--', color='red', linewidth=2, 
+             label=f'Tendenza (y = {z[0]:.2f}x + {z[1]:.2f})')
+    
+    plt.fill_between(anni, medie_nazionali, alpha=0.3, color='blue')
+    plt.xlabel('Anno')
+    plt.ylabel('Produttività Media (migliaia €)')
+    plt.title('Evoluzione della Produttività Media Nazionale del Settore Pesca')
+    plt.legend()
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
+    
+    # Salva il grafico
+    graph_path = os.path.join('app', 'static', 'graphs', 'produttivita_evoluzione.png')
+    plt.savefig(graph_path, format='png', dpi=300, bbox_inches='tight')
+    plt.close()
+    
+    return "Grafico salvato in static/graphs/produttivita_evoluzione.png"
+
+@main.route('/grafico/heatmap-variazioni')
+def grafico_heatmap_variazioni():
+    """Grafico a heatmap delle variazioni percentuali per regione e anno"""
+    dati = DatiPesca.query.all()
+    
+    # Crea una matrice delle variazioni percentuali
+    regioni = list(set([d.regione for d in dati]))
+    anni = sorted(list(set([d.anno for d in dati])))
+    
+    # Crea una matrice vuota
+    matrix = np.zeros((len(regioni), len(anni)))
+    
+    # Popola la matrice con le variazioni percentuali (usando occupazione come proxy)
+    for d in dati:
+        if d.regione in regioni and d.anno in anni:
+            row = regioni.index(d.regione)
+            col = anni.index(d.anno)
+            matrix[row, col] = d.occupazione
+    
+    # Crea il heatmap
+    plt.figure(figsize=(16, 10))
+    sns.heatmap(matrix, 
+                xticklabels=anni, 
+                yticklabels=regioni,
+                cmap='RdYlBu_r',
+                center=0,
+                annot=True,
+                fmt='.2f',
+                cbar_kws={'label': 'Variazione Percentuale'})
+    
+    plt.title('Heatmap delle Variazioni Percentuali per Regione e Anno')
+    plt.xlabel('Anno')
+    plt.ylabel('Regione')
+    plt.xticks(rotation=45)
+    plt.tight_layout()
+    
+    # Salva il grafico
+    graph_path = os.path.join('app', 'static', 'graphs', 'heatmap_variazioni.png')
+    plt.savefig(graph_path, format='png', dpi=300, bbox_inches='tight')
+    plt.close()
+    
+    return "Grafico salvato in static/graphs/heatmap_variazioni.png"
+
+@main.route('/grafico/radar-top-regioni')
+def grafico_radar_top_regioni():
+    """Grafico a radar delle performance delle top 5 regioni"""
+    dati = DatiPesca.query.all()
+    
+    # Calcola le metriche medie per regione
+    metriche_regioni = {}
+    for d in dati:
+        if d.regione not in metriche_regioni:
+            metriche_regioni[d.regione] = {'prod': [], 'occ': [], 'imp': []}
+        metriche_regioni[d.regione]['prod'].append(d.produttivita)
+        metriche_regioni[d.regione]['occ'].append(d.occupazione)
+        metriche_regioni[d.regione]['imp'].append(d.importanza_economica)
+    
+    # Calcola le medie e trova le top 5 per produttività
+    regioni_scores = []
+    for regione, metriche in metriche_regioni.items():
+        if metriche['prod']:  # Se ci sono dati
+            score_prod = np.mean(metriche['prod'])
+            score_occ = np.mean(metriche['occ'])
+            score_imp = np.mean(metriche['imp'])
+            regioni_scores.append((regione, score_prod, score_occ, score_imp))
+    
+    # Ordina per produttività e prendi le top 5
+    top_5 = sorted(regioni_scores, key=lambda x: x[1], reverse=True)[:5]
+    
+    # Prepara i dati per il radar
+    categorie = ['Produttività', 'Occupazione', 'Importanza Economica']
+    N = len(categorie)
+    
+    # Normalizza i valori per il radar (0-1)
+    max_prod = max([x[1] for x in top_5])
+    max_occ = max([x[2] for x in top_5])
+    max_imp = max([x[3] for x in top_5])
+    
+    # Crea il grafico radar
+    fig, ax = plt.subplots(figsize=(12, 10), subplot_kw=dict(projection='polar'))
+    
+    angles = np.linspace(0, 2 * np.pi, N, endpoint=False).tolist()
+    angles += angles[:1]  # Chiudi il poligono
+    
+    colors = ['red', 'blue', 'green', 'orange', 'purple']
+    
+    for i, (regione, prod, occ, imp) in enumerate(top_5):
+        values = [prod/max_prod, occ/max_occ, imp/max_imp]
+        values += values[:1]  # Chiudi il poligono
+        
+        ax.plot(angles, values, 'o-', linewidth=2, label=regione, color=colors[i])
+        ax.fill(angles, values, alpha=0.1, color=colors[i])
+    
+    ax.set_xticks(angles[:-1])
+    ax.set_xticklabels(categorie)
+    ax.set_ylim(0, 1)
+    ax.set_title('Performance Radar delle Top 5 Regioni', size=16, pad=20)
+    ax.legend(loc='upper right', bbox_to_anchor=(1.3, 1.0))
+    ax.grid(True)
+    
+    # Salva il grafico
+    graph_path = os.path.join('app', 'static', 'graphs', 'radar_top_regioni.png')
+    plt.savefig(graph_path, format='png', dpi=300, bbox_inches='tight')
+    plt.close()
+    
+    return "Grafico salvato in static/graphs/radar_top_regioni.png"
 
 @main.route('/grafico/hp')
 def grafico_hp():
@@ -96,11 +318,13 @@ def grafico_hp():
         ax.set_title('Distribuzione HP Pokémon')
         ax.set_xlabel('HP')
         ax.set_ylabel('Numero Pokémon')
-    buf = io.BytesIO()
-    plt.savefig(buf, format='png')
+    
+    # Salva il grafico nella cartella static/graphs
+    graph_path = os.path.join('app', 'static', 'graphs', 'hp_distribution.png')
+    plt.savefig(graph_path, format='png', dpi=300, bbox_inches='tight')
     plt.close(fig)
-    buf.seek(0)
-    return Response(buf.getvalue(), mimetype='image/png')
+    
+    return "Grafico salvato in static/graphs/hp_distribution.png"
 
 @main.route('/grafico/tipi')
 def grafico_tipi():
@@ -114,11 +338,13 @@ def grafico_tipi():
     fig, ax = plt.subplots()
     ax.pie(sizes, labels=labels, autopct='%1.1f%%', startangle=140)
     ax.set_title('Distribuzione dei tipi principali')
-    buf = io.BytesIO()
-    plt.savefig(buf, format='png')
+    
+    # Salva il grafico nella cartella static/graphs
+    graph_path = os.path.join('app', 'static', 'graphs', 'tipi_distribution.png')
+    plt.savefig(graph_path, format='png', dpi=300, bbox_inches='tight')
     plt.close(fig)
-    buf.seek(0)
-    return Response(buf.getvalue(), mimetype='image/png')
+    
+    return "Grafico salvato in static/graphs/tipi_distribution.png"
 
 @main.route('/grafico/atkdef')
 def grafico_atkdef():
@@ -181,11 +407,12 @@ def grafico_atkdef():
     ax.set_ylabel('Difesa')
     ax.legend()
 
-    buf = io.BytesIO()
-    plt.savefig(buf, format='png')
+    # Salva il grafico nella cartella static/graphs
+    graph_path = os.path.join('app', 'static', 'graphs', 'atk_def_scatter.png')
+    plt.savefig(graph_path, format='png', dpi=300, bbox_inches='tight')
     plt.close(fig)
-    buf.seek(0)
-    return Response(buf.getvalue(), mimetype='image/png')
+    
+    return "Grafico salvato in static/graphs/atk_def_scatter.png"
 
 @main.route('/grafico/leggendari')
 def grafico_legendari():
@@ -220,8 +447,9 @@ def grafico_legendari():
     ax.set_xlabel('Attacco')
     ax.set_ylabel('Difesa')
 
-    buf = io.BytesIO()
-    plt.savefig(buf, format='png')
+    # Salva il grafico nella cartella static/graphs
+    graph_path = os.path.join('app', 'static', 'graphs', 'legendari_scatter.png')
+    plt.savefig(graph_path, format='png', dpi=300, bbox_inches='tight')
     plt.close(fig)
-    buf.seek(0)
-    return Response(buf.getvalue(), mimetype='image/png')
+    
+    return "Grafico salvato in static/graphs/legendari_scatter.png"
