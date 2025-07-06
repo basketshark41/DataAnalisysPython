@@ -15,6 +15,7 @@ def create_app():
     CORS(app)
     
     from app.models import Pokemon  # Import dopo db.init_app
+    from app.models import DatiPesca  # Import dopo db.init_app
     from .views import main
     from .api import api
     app.register_blueprint(main)
@@ -23,6 +24,7 @@ def create_app():
     with app.app_context():
         db.create_all()
         importa_pokemon(Pokemon)  # Passo Pokemon come argomento
+        importa_dati_pesca(DatiPesca)  # Importa i dati di pesca
     return app
 
 def importa_pokemon(Pokemon):  # Accetta Pokemon come argomento
@@ -62,3 +64,58 @@ def importa_pokemon(Pokemon):  # Accetta Pokemon come argomento
 
     db.session.commit()
     print(f"✅ Importati {len(df)} Pokémon.")
+    
+from sklearn.preprocessing import MinMaxScaler
+
+def importa_dati_pesca(DatiPesca):
+    if DatiPesca.query.first():
+        print("✅ Dati pesca già presenti. Importazione saltata.")
+        return
+
+    print("📦 Importazione dati pesca...")
+    base_path = os.path.join(os.path.dirname(__file__), "data")
+
+    # Caricamento file
+    df_occ = pd.read_csv(os.path.join(base_path, "Andamento-occupazione-del-settore-della-pesca-per-regione.csv"), sep=";", encoding="latin1")
+    df_imp = pd.read_csv(os.path.join(base_path, "Importanza-economica-del-settore-della-pesca-per-regione.csv"), sep=";", encoding="latin1")
+    df_prod = pd.read_csv(os.path.join(base_path, "Produttivita-del-settore-della-pesca-per-regione.csv"), sep=";", encoding="latin1")
+
+    print("df_occ columns:", df_occ.columns.tolist())
+    print("df_imp columns:", df_imp.columns.tolist())
+    print("df_prod columns:", df_prod.columns.tolist())
+    # Rinominare colonne per unione
+    df_occ.rename(columns={df_occ.columns[2]: "Occupazione"}, inplace=True)
+    df_imp.rename(columns={df_imp.columns[2]: "ImportanzaEconomica"}, inplace=True)
+    df_prod.rename(columns={df_prod.columns[2]: "Produttivita"}, inplace=True)
+
+    # Unione dei dati
+    df = df_occ.merge(df_imp, on=["Anno","Regione"]).merge(df_prod, on=["Anno","Regione"])
+
+    # Rimozione righe con dati mancanti
+    df.dropna(subset=["Occupazione", "ImportanzaEconomica", "Produttivita"], inplace=True)
+
+    # Conversione a numerico
+    for col in ["Occupazione", "ImportanzaEconomica", "Produttivita"]:
+        df[col] = df[col].astype(str).str.replace(",", ".", regex=False)  # sostituisci virgola con punto
+        df[col] = pd.to_numeric(df[col], errors="raise")  # poi converti a float
+
+    df.dropna(subset=["Occupazione", "ImportanzaEconomica", "Produttivita"], inplace=True)
+
+    # Normalizzazione (MinMax)
+   
+
+    # Salvataggio nel database
+    for _, row in df.iterrows():
+        entry = DatiPesca(
+            anno=row["Anno"],
+            regione=row["Regione"],
+            occupazione=row["Occupazione"],
+            importanza_economica=row["ImportanzaEconomica"],
+            produttivita=row["Produttivita"]
+        )
+        db.session.add(entry)
+
+    db.session.commit()
+    print(f"✅ Importati {len(df)} record di dati pesca.")
+    
+

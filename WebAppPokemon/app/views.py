@@ -1,8 +1,11 @@
 from flask import Blueprint, render_template, Response
 import io
 import pandas as pd
+import os
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
-from app.models import Pokemon
+from app.models import Pokemon, DatiPesca
 import numpy as np
 
 main = Blueprint('main', __name__)
@@ -14,14 +17,71 @@ def index():
 @main.route('/grafico')
 def grafico():
     # Esempio dati
-    df = pd.DataFrame({'x': [1, 2, 3], 'y': [4, 5, 6]})
-    fig, ax = plt.subplots()
-    df.plot(x='x', y='y', ax=ax)
+    datiPesca = DatiPesca.query.all()
+    prod_by_region = {}
+    for d in datiPesca:
+        if d.regione not in prod_by_region:
+            prod_by_region[d.regione] = {'anno': [], 'produttivita': []}
+        prod_by_region[d.regione]['anno'].append(d.anno)
+        prod_by_region[d.regione]['produttivita'].append(d.produttivita)
+
+    # Crea il grafico
+    plt.figure(figsize=(12, 8))
+    for regione, data in prod_by_region.items():
+        plt.plot(data['anno'], data['produttivita'], label=regione)
+
+    plt.xlabel("Anno")
+    plt.ylabel("Produttività (migliaia €)")
+    plt.title("Andamento della produttività del settore pesca per regione")
+    plt.legend(loc='upper left', bbox_to_anchor=(1, 1))
+    plt.tight_layout()
+    plt.grid(True)
     buf = io.BytesIO()
     plt.savefig(buf, format='png')
-    plt.close(fig)
+    plt.close()
     buf.seek(0)
     return Response(buf.getvalue(), mimetype='image/png')
+    
+@main.route('/grafico/occupazione')
+def grafico_occupazione_importanza():
+    # Carica i dati dal database
+    dati = DatiPesca.query.all()
+
+    # Ristruttura i dati per regione
+    data_by_region = {}
+    for d in dati:
+        reg = d.regione
+        data_by_region.setdefault(reg, {'anno': [], 'occ': [], 'imp': []})
+        data_by_region[reg]['anno'].append(d.anno)
+        data_by_region[reg]['occ'].append(d.occupazione)
+        data_by_region[reg]['imp'].append(d.importanza_economica)
+
+    # Crea la figura
+    plt.figure(figsize=(14, 8))
+    for regione, vals in data_by_region.items():
+        # linea occupazione
+        plt.plot(vals['anno'], vals['occ'],
+                 label=f"{regione} - Occupazione",
+                 linestyle='-', marker='o')
+        # linea importanza economica
+        plt.plot(vals['anno'], vals['imp'],
+                 label=f"{regione} - Import. Econ.",
+                 linestyle='--', marker='x')
+
+    plt.xlabel("Anno")
+    plt.ylabel("Valore normalizzato")
+    plt.title("Andamento Occupazione e Importanza Economica per Regione")
+    plt.legend(loc='center left', bbox_to_anchor=(1, 0.5))
+    plt.grid(True)
+    plt.tight_layout()
+
+    # Salva in buffer e ritorna come PNG
+    buf = io.BytesIO()
+    plt.savefig(buf, format='png')
+    plt.close()
+    buf.seek(0)
+    return Response(buf.getvalue(), mimetype='image/png')
+
 
 @main.route('/grafico/hp')
 def grafico_hp():

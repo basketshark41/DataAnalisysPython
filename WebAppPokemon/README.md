@@ -5,6 +5,7 @@ cd WebAppPokemon
 # 2. Creare e attivare un virtual environment
 python -m venv venv
 source venv/bin/activate  # Su Windows: venv\Scripts\activate
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope Process
 
 # 3. Installare le dipendenze
 pip install -r requirements.txt

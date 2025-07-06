@@ -8,6 +8,9 @@
     <h2>Partecipazione al Mercato del Lavoro</h2>
     <img src="{{ url_for('main.grafico') }}" alt="Grafico esempio" style="max-width:800px; display:block; margin-bottom:30px;"/>
 
+    <h2>Partecipazione al Mercato del Lavoro</h2>
+    <img src="{{ url_for('main.grafico_occupazione_importanza') }}" alt="Grafico esempio" style="max-width:800px; display:block; margin-bottom:30px;"/>
+
     <h2>Distribuzione HP Pokémon</h2>
     <img src="{{ url_for('main.grafico_hp') }}" alt="HP Pokémon" style="max-width:800px; display:block; margin-bottom:30px;"/>
 
@@ -20,13 +23,6 @@
     <h2>Attacco vs Difesa Leggendari</h2>
     <img src="{{ url_for('main.grafico_legendari') }}" alt="Attacco vs Difesa Leggendari" style="max-width:800px; display:block; margin-bottom:30px;"/>
 
-    <h2>Distribuzione dei tipi principali dei Pokémon</h2>
-    <canvas id="typeChart" width="800" height="400"></canvas>
-    <h2>HP dei Pokémon (Top 20)</h2>
-    <canvas id="hpChart" width="800" height="400"></canvas>
-    <h2>Attacco dei Pokémon (Top 20)</h2>
-    <canvas id="attChart" width="800" height="400"></canvas>
-
-    <script src="{{ url_for('static', filename='js/charts.js') }}"></script>
+  
 </body>
 </html>
